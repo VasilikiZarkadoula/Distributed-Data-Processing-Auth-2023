@@ -1,6 +1,4 @@
-# Distributed-Data-Processing-Auth-2023
-
-# Distributed Data Processing - Docker Application
+# Distributed Data Processing Auth2023 - Docker Application
 
 
 ## Prerequisites
