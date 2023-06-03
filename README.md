@@ -11,7 +11,7 @@ Follow the steps below to run the application using Docker:
 
 1. Open a terminal and clone the repository to your local machine:
 ```bash
-git clone https://github.com/your-username/your-repository.git
+git clone [https://github.com/your-username/your-repository.git](https://github.com/VasilikiZarkadoula/Distributed-Data-Processing-Auth-2023)
 ```
 
 2. Navigate to the repository directory:
