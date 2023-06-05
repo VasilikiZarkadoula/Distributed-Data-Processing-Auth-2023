@@ -4,7 +4,6 @@ FROM python:3.7.9
 # Set the working directory in the container
 WORKDIR /app
 
-
 # Install the Python dependencies
 RUN pip install --no-cache-dir --upgrade pip
 
@@ -15,4 +14,4 @@ COPY . .
 COPY databases/ /app/databases/
 
 # Define the default command to run when the container starts
-CMD ["python", "run_scripts.py"]
+CMD ["python", "main.py"]

@@ -3,9 +3,6 @@ from datetime import datetime, timedelta
 import logging
 import time
 
-#logging.basicConfig(level=logging.INFO, format='%(message)s')
-
-
 class SemiJoin:
     def __init__(self, conn1, conn2):
         """
@@ -23,6 +20,20 @@ class SemiJoin:
         self.logger = logging.getLogger("SemiJoin")
         self.logger.setLevel(logging.INFO)
 
+    def get_table_name(self, cursor):
+        """
+        Get the table name from the cursor.
+
+        Args:
+            cursor (sqlite3.Cursor): Database cursor.
+
+        Returns:
+            str: Table name.
+        """
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        result = cursor.fetchone()
+        return result[0] if result else None
+
     def get_largest_table(self):
         """
         Determine the largest table between two databases.
@@ -30,17 +41,19 @@ class SemiJoin:
         Returns:
             sqlite3.Connection: The connection to the database containing the largest table.
         """
-        self.cursor1.execute("SELECT COUNT(*) FROM table1")
+        table1 = self.get_table_name(self.cursor1)
+        self.cursor1.execute(f"SELECT COUNT(*) FROM {table1}")
         count_table1 = self.cursor1.fetchone()[0]
 
-        self.cursor2.execute("SELECT COUNT(*) FROM table2")
+        table2 = self.get_table_name(self.cursor2)
+        self.cursor2.execute(f"SELECT COUNT(*) FROM {table2}")
         count_table2 = self.cursor2.fetchone()[0]
 
         if count_table1 >= count_table2:
-            self.logger.info("table1 in database1 is the largest")
+            self.logger.info("table in database1 is the largest")
             return self.conn1
         else:
-            self.logger.info("table2 in database2 is the largest")
+            self.logger.info("table in database2 is the largest")
             return self.conn2
 
     def perform_semi_join(self):
@@ -51,17 +64,15 @@ class SemiJoin:
         1. Determine the largest table between the two databases.
         2. Compute S1 = Πa(S), where S is the largest table.
         3. Compute R1 = R ⋉aS1, where R is the smaller table.
-        4. Compute R1⋈aS, which represents the semi-join result.
         5. Compare the timestamps of matching rows and output the results.
 
         Note:
         - Πa(S) denotes the projection operation on table S, selecting only the 'id' (a) column.
         - R ⋉aS1 denotes the semi-join operation between R and S1, where 'a' represents the join attribute.
-        - R1⋈aS represents the join operation between R1 and S, where 'a' represents the join attribute.
 
         After performing the semi-join, the matching results are logged and printed, and the counter is incremented.
         """
-        self.logger.info("============================== Semi Join ==============================")
+        self.logger.info("\n============================== Semi Join ==============================")
 
         # Following Semi-join-based Ordering from slide 44 - Ozsu-QP-2022
 
@@ -71,63 +82,24 @@ class SemiJoin:
         cursor_S = S.cursor()
         cursor_R = R.cursor()
 
-        cursor_S.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        cursor_R.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        table_S_name = cursor_S.fetchone()[0]
+        table_S_name = self.get_table_name(cursor_S)
         self.logger.info(f"S = {table_S_name}")
-        table_R_name = cursor_R.fetchone()[0]
+        table_R_name = self.get_table_name(cursor_R)
         self.logger.info(f"R = {table_R_name}")
 
         # step 1 - S1 = Πa(S)
         cursor_S.execute(f"SELECT id FROM {table_S_name}")
         S1 = [row[0] for row in cursor_S.fetchall()]
 
-        self.logger.info("Transferring S1 to Site 1...")
-
         # step 2 - Site 1 computes R1 = R ⋉aS1
-        #print("Computing R1 = R ⋉aS1")
-        self.logger.info("Computing R1 = R semi-join S1")
+        self.logger.info("Computing R1 = R semi-join S1:")
         cursor_R.execute(f"SELECT * FROM {table_R_name}")
-        R1 = [row for row in cursor_R.fetchall() if row[0] in S1]  # List comprehension
-
-        self.logger.info("Transferring R1 to Site 2...")
-
-        # step 3 - Site 2 computes R1⋈aS
-        #print("Computing R1⋈aS")
-        self.logger.info("Computing R1 join S")
-
-        for row_R1 in R1:
-            cursor_S.execute(f"SELECT name, email, timestamp FROM {table_S_name} WHERE id=?", (row_R1[0],))
+        R1 = []
+        for row in cursor_R.fetchall():
+            cursor_S.execute(f"SELECT name, email, timestamp FROM {table_S_name} WHERE id=?", (row[0],))
             row_S = cursor_S.fetchone()
-            if row_S:
-                timediff = abs(datetime.strptime(row_R1[3], "%Y-%m-%d %H:%M:%S") - datetime.strptime(row_S[2],"%Y-%m-%d %H:%M:%S"))
-                if timediff <= timedelta(hours=12):
-                    self.logger.info(f"Got match => ({row_R1[0]}, ({row_R1[1]}, {row_R1[2]}, {row_R1[3]}), {row_S}, {round(timediff.total_seconds() / 3600)})")
-                    self.counter += 1
-
-
-logging.basicConfig(filename='semi_join_logs.log', level=logging.INFO)
-
-database_path = 'databases/'
-
-# Connect to the two databases
-conn1 = sqlite3.connect(database_path + "database1.db")
-conn2 = sqlite3.connect(database_path + "database2.db")
-
-# Create an instance of SemiJoin
-semi_join = SemiJoin(conn1, conn2)
-
-start_time = time.time()
-# Perform the semi-join
-semi_join.perform_semi_join()
-
-end_time = time.time()
-running_time = end_time - start_time
-logging.info(f"Running time: {running_time} seconds")
-
-# Get the count of matched results
-logging.info(f"Total matches: {semi_join.counter}")
-
-# Close the database connections
-conn1.close()
-conn2.close()
+            timediff = abs(datetime.strptime(row[3], "%Y-%m-%d %H:%M:%S") - datetime.strptime(row_S[2], "%Y-%m-%d %H:%M:%S"))
+            if (row[0] in S1) and (timediff <= timedelta(hours=12)):
+                logging.info(row)
+                R1.append(row)
+                self.counter += 1

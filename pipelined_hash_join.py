@@ -1,9 +1,8 @@
 import sqlite3
-from datetime import datetime, timedelta
 import logging
-import time
+from datetime import datetime, timedelta
 
-#logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 class HashJoin:
     def __init__(self, conn1, conn2):
@@ -17,75 +16,93 @@ class HashJoin:
         self.conn2 = conn2
         self.cursor1 = conn1.cursor()
         self.cursor2 = conn2.cursor()
-        self.hash_table = {}
-        self.counter = 0
+        self.ht1 = {}  # Initialize empty hash table for table1
+        self.ht2 = {}  # Initialize empty hash table for table2
+        self.counter = 0  # Initialize counter for counting the mathing records
 
-    def retrieve_matching_records(self, tuple_):
+    def get_table_name(self, cursor):
         """
-        Retrieve matching records from the hash table.
+        Get the table name from the cursor.
 
-        :param tuple_: Database table tuple
-        :yield: Tuple representing the join result (key, record1, record2, time_diff)
-
-        This method takes a tuple from a database table and performs a probing operation by checking if the hash table
-        already contains a specific key. If the key is present, it yields the matching records from both databases.
-        If the key is not present, it inserts the key into the hash table and continues processing.
-
-        The yield statement allows the method to be used as a generator, yielding the join results one at a time. This
-        reduces memory consumption and improves scalability for large datasets.
+        :param cursor: Database cursor
+        :return: Table name
         """
-        key = tuple_[0]
-        timestamp = tuple_[3]
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        result = cursor.fetchone()
+        return result[0] if result else None
 
-        # Check for key-based matches and timestamp-based matches
-        for record_key, records in self.hash_table.items():
-            for record in records:
-                record_timestamp = record[3]
-                time_diff = (abs(datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S") - datetime.strptime(record_timestamp, "%Y-%m-%d %H:%M:%S"))).total_seconds() / 3600
-                if key == record[0] and time_diff <= 12:
-                    yield (key, record, tuple_, round(time_diff))
+    @staticmethod
+    def probe_and_insert(tuple_, ht_probe, ht_insert):
+        """
+        Perform probing and insertion in the hash tables.
 
-        # Add the current tuple to the hash table
-        self.hash_table.setdefault(key, []).append(tuple_)
+        :param tuple_: Tuple representing a record from one of the databases
+        :param ht_probe: Hash table for probing
+        :param ht_insert: Hash table for insertion
+        :return: Result set if a match is found within the specified timestamp difference, otherwise None
+        """
+        probe_result_key = tuple_[0]  # Define the key of the tuple (join attribute)
+        result_set = None
 
+        if probe_result_key in ht_probe:
+            # Retrieve matching records from both databases using the probe result key
+            record1 = ht_probe[probe_result_key]
+            record2 = tuple_
+            timestamp1 = record1[3]  # Extract the timestamp from record1
+            timestamp2 = record2[3]  # Extract the timestamp from record2
+
+            # Check if the timestamp difference is less than 12 hours
+            time_diff = (abs(datetime.strptime(timestamp1, "%Y-%m-%d %H:%M:%S") - datetime.strptime(timestamp2,
+                                                                                                    "%Y-%m-%d %H:%M:%S"))).total_seconds() / 3600
+            if time_diff < 12:
+                result_set = (probe_result_key, record1, record2, round(time_diff))
+
+        ht_insert[probe_result_key] = tuple_  # Insert the tuple into the insertion hash table
+
+        return result_set
 
     def perform_pipelined_hash_join(self):
         """
-        Perform the pipelined hash join algorithm.
+        Perform the double pipelined hash join algorithm.
 
-        This method implements the main logic of the pipelined hash join algorithm. It iterates over the tuples from
-        both databases, performs probing and insertion in the hash table, and prints the join results.
+        It iterates over the tuples from both databases, performs probing and insertion in the hash tables, and prints
+        the join results.
 
         The method follows the pipelined hash join algorithm, which involves alternating between reading tuples from
-        the databases, probing the hash table, and inserting tuples into the hash table. It ensures efficient join
-        operation and reduces memory usage.
+        the databases, probing one hash table, and inserting tuples into the other hash table.
 
-        The join results are printed using the process_join_result method, and the total number of matches is tracked by
-        the counter attribute.
+        The join results are printed using the process_join_result method.
         """
 
-        self.cursor1.execute("SELECT * FROM table1")
-        self.cursor2.execute("SELECT * FROM table2")
-        read_from_database1 = True  # Flag to indicate if we are currently reading from database1
-        logging.info(f"Reading from database1: {read_from_database1}")
-        logging.info("============================== Pipelined Hash Join ==============================")
+        table1_name = self.get_table_name(self.cursor1)
+        table2_name = self.get_table_name(self.cursor2)
 
-        # Iterate over the tuples from both databases and perform the hash join operation
+        self.cursor1.execute(f"SELECT * FROM {table1_name}")
+        self.cursor2.execute(f"SELECT * FROM {table2_name}")
+
+        read_from_database1 = True  # Flag to determine database to read from
+
+        logging.info("\n============================== Pipelined Hash Join ==============================")
+
+        # Iterate over the tuples from both databases and perform the pipelined hash join operation
         while True:
-            if read_from_database1:  # If reading from database1
+            if read_from_database1:
                 tuple_ = self.cursor1.fetchone()
                 if tuple_ is None:
                     break
-                # Perform probing and insertion, and iterate over the join results
-                for result in self.retrieve_matching_records(tuple_):
-                    self.process_join_result(result, "database2", "database1")
-            else:  # If reading from database2
+
+                # join the tuple from table1 with the probed tuples of table2
+                result = self.probe_and_insert(tuple_, self.ht2, self.ht1)
+                self.process_join_result(result, self.conn2.execute("PRAGMA database_list").fetchall()[0][1],
+                                         self.conn1.execute("PRAGMA database_list").fetchall()[0][1])
+            else:
                 tuple_ = self.cursor2.fetchone()
                 if tuple_ is None:
                     break
-                # Perform probing and insertion, and iterate over the join results
-                for result in self.retrieve_matching_records(tuple_):
-                    self.process_join_result(result, "database1", "database2")
+
+                result = self.probe_and_insert(tuple_, self.ht1, self.ht2)
+                self.process_join_result(result, self.conn1.execute("PRAGMA database_list").fetchall()[0][1],
+                                         self.conn2.execute("PRAGMA database_list").fetchall()[0][1])
 
             read_from_database1 = not read_from_database1  # Switch the flag to alternate between databases
 
@@ -94,60 +111,28 @@ class HashJoin:
             tuple_ = self.cursor1.fetchone()
             if tuple_ is None:
                 break
-            # Perform probing and insertion, and iterate over the join results
-            for result in self.retrieve_matching_records(tuple_):
-                self.process_join_result(result, "database2", "database1")
+            # probe them against table2 and output
+            result = self.probe_and_insert(tuple_, self.ht2, self.ht1)
+            self.process_join_result(result, self.conn2.execute("PRAGMA database_list").fetchall()[0][1],
+                                     self.conn1.execute("PRAGMA database_list").fetchall()[0][1])
 
         # Process the remaining tuples from database2 (if any)
         while True:
             tuple_ = self.cursor2.fetchone()
             if tuple_ is None:
                 break
-            # Perform probing and insertion, and iterate over the join results
-            for result in self.retrieve_matching_records(tuple_):
-                self.process_join_result(result, "database1", "database2")
+
+            # probe them against table1 and output
+            result = self.probe_and_insert(tuple_, self.ht1, self.ht2)
+            self.process_join_result(result, self.conn1.execute("PRAGMA database_list").fetchall()[0][1],
+                                         self.conn2.execute("PRAGMA database_list").fetchall()[0][1])
 
     def process_join_result(self, triple, probe, insert):
         """
         Print the join result.
-
-        :param triple: Tuple representing the join result (key, record1, record2)
-        :param probe: Name of the database where the probing occurred
-        :param insert: Name of the database where the insertion occurred
-
-        This method prints the join result, which is a tuple containing the key and the matching records from both
-        databases. The `probe` parameter specifies the name of the database where the probing operation occurred,
-        and the `insert` parameter specifies the name of the database where the insertion operation occurred.
-
-        Example output: "Matching records from probing database2 and inserting database1 => (key, record1, record2)"
         """
         if triple is not None:
             logging.info(f"Matching records from probing {probe} and inserting {insert} => {triple}")
             self.counter += 1
 
 
-logging.basicConfig(filename='pipelined_hash_join_logs.log', level=logging.INFO)
-
-database_path = 'databases/'
-
-# Connect to the two databases
-conn1 = sqlite3.connect(database_path + "database1.db")
-conn2 = sqlite3.connect(database_path + "database2.db")
-
-# Create instances of HashJoin with the database connections
-hash_join = HashJoin(conn1, conn2)
-
-start_time = time.time()
-# Perform the pipelined hash join
-hash_join.perform_pipelined_hash_join()
-
-end_time = time.time()
-running_time = end_time - start_time
-logging.info(f"Running time: {running_time} seconds")
-
-# Print the total number of matches found
-logging.info(f"Total matches found: {hash_join.counter}")
-
-# Close the database connections
-conn1.close()
-conn2.close()
