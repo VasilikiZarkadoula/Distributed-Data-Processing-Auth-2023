@@ -55,26 +55,24 @@ class SemiJoin:
 
         self.logger.info("Computing R1 = R semi-join S1:")
         R1 = []
+        S_lookup = {row[0]: row for row in S}
         for row in R:
             row_R_id = row[0]
-            for row_S in S:
-                row_S_id = row_S[0]
-                if row_R_id == row_S_id:
-                    if self.lazy:
-                        # Calculate the timestamp difference in hours
-                        time_diff = (abs(datetime.strptime(row[3], "%Y-%m-%d %H:%M:%S")
-                                         - datetime.strptime(row_S[3], "%Y-%m-%d %H:%M:%S"))).total_seconds() / 3600
-                        if time_diff < self.timestamp_diff:
-                            # Add the row to the result set
-                            R1.append(row)
-                            self.logger.info(row)
-                            self.counter += 1
-                            break
-                    else:
+            if row_R_id in S_lookup:
+                if self.lazy:
+                    row_S = S_lookup[row_R_id]
+                    # Calculate the timestamp difference in hours
+                    time_diff = (abs(datetime.strptime(row[3], "%Y-%m-%d %H:%M:%S")
+                                     - datetime.strptime(row_S[3], "%Y-%m-%d %H:%M:%S"))).total_seconds() / 3600
+                    if time_diff < self.timestamp_diff:
                         # Add the row to the result set
                         R1.append(row)
-                        self.logger.info(row)
+                        # self.logger.info(row)
                         self.counter += 1
-                        break
+                else:
+                    # Add the row to the result set
+                    R1.append(row)
+                    # self.logger.info(row)
+                    self.counter += 1
 
         return R1
