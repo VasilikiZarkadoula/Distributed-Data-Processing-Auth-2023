@@ -130,7 +130,7 @@ class SemiJoin:
 
             size_used = (sys.getsizeof(R1) + sys.getsizeof(S_lookup) + sys.getsizeof(R_lookup)) / 1024 / 1024
 
-        # Join only on id -  timestamps are filtered before join
+        # Check only id -  timestamps are filtered before join
         else:
             S_lookup = {row[0]: row[3] for row in S}
             for row in R:
