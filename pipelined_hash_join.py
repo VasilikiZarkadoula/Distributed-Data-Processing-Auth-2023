@@ -13,6 +13,8 @@ class HashJoin:
         self.ht1 = {}  # Initialize empty hash table for table1
         self.ht2 = {}  # Initialize empty hash table for table2
         self.counter = 0  # Initialize counter for counting the matching records
+        self.logger = logging.getLogger("PipelinedHashJoin")
+        self.logger.setLevel(logging.INFO)
 
     def probe_and_insert(self, tuple_, ht_probe, ht_insert):
         """
@@ -30,17 +32,16 @@ class HashJoin:
             # Retrieve matching records from both databases using the probe result key
             record1 = ht_probe[probe_result_key]
             record2 = tuple_
+
+            # Lazy
             if self.lazy:
                 # Check if the timestamp difference is less than a specified hour limit
-                time_diff = (
-                                abs(
-                                    datetime.strptime(record1[3], "%Y-%m-%d %H:%M:%S")
-                                    - datetime.strptime(record2[3], "%Y-%m-%d %H:%M:%S")
-                                )
-                            ).total_seconds() / 3600
+                time_diff = (abs(datetime.strptime(record1[3], "%Y-%m-%d %H:%M:%S") -
+                                    datetime.strptime(record2[3], "%Y-%m-%d %H:%M:%S"))).total_seconds() / 3600
                 if time_diff < self.timestamp_diff:
                     result_set = (probe_result_key, record1, record2)
-            else:
+
+            else:  # Check only id -  timestamps are filtered before join
                 result_set = (probe_result_key, record1, record2)
 
         ht_insert[probe_result_key] = tuple_  # Insert the tuple into the insertion hash table
@@ -63,7 +64,7 @@ class HashJoin:
         read_index_table1 = 0  # Index for reading from table1
         read_index_table2 = 0  # Index for reading from table2
 
-        logging.info("\n============================== Pipelined Hash Join ==============================")
+        self.logger.info("\n============================== Pipelined Hash Join ==============================")
 
         # Iterate over the tuples from both tables and perform the pipelined hash join operation
         while True:
@@ -71,7 +72,8 @@ class HashJoin:
                 # Read a tuple from table1 at the current read index
                 tuple_ = self.table1[read_index_table1]
 
-                # Perform probing and insertion by using table2 as the probe hash table and table1 as the insert hash table
+                # Perform probing and insertion by using table2 as the probe hash table
+                # and table1 as the insert hash table
                 result = self.probe_and_insert(tuple_, self.ht2, self.ht1)
 
                 # Process the join result
@@ -84,7 +86,8 @@ class HashJoin:
                 # Read a tuple from table2 at the current read index
                 tuple_ = self.table2[read_index_table2]
 
-                # Perform probing and insertion by using table1 as the probe hash table and table2 as the insert hash table
+                # Perform probing and insertion by using table1 as the probe hash table
+                # and table2 as the insert hash table
                 result = self.probe_and_insert(tuple_, self.ht1, self.ht2)
 
                 # Process the join result
@@ -130,6 +133,6 @@ class HashJoin:
         Print the join result.
         """
         if triple is not None:
-            #logging.info(f"Matching records from probing {probe} and inserting {insert} => {triple}")
-            logging.info(triple)
+            self.logger.info(f"Matching records from probing {probe} and inserting {insert} => {triple}")
+            #self.logger.info(triple)
             self.counter += 1

@@ -15,6 +15,7 @@ class CreateTable:
         self.cursor1 = conn1.cursor()
         self.cursor2 = conn2.cursor()
 
+
     @staticmethod
     def generate_timestamp(primary_key, seed):
         random.seed(primary_key + seed)  # Incorporate primary_key into the seed
@@ -42,8 +43,8 @@ class CreateTable:
 
         # Insert random data into the table with random timestamps
         for i in range(1, num_records):
-            name = f"Name_{random.randint(1, 300)}"
-            email = f"email_{random.randint(1, 300)}@example.com"
+            name = f"Name_{random.randint(1, 30000000)}"
+            email = f"email_{random.randint(1, 30000000)}@example.com"
             timestamp = self.generate_timestamp(i, seed)
             cursor.execute(f'INSERT INTO {table_name} (name, email, timestamp) VALUES (?, ?, ?)',
                            (name, email, timestamp))
@@ -51,9 +52,9 @@ class CreateTable:
         # Commit the changes
         connection.commit()
 
-    def create_tables(self, seed=None):
+    def create_tables(self, size1, size2, seed=None):
         # Create table1
-        self.create_table(self.conn1, self.cursor1, 'table1', 200, seed)
+        self.create_table(self.conn1, self.cursor1, 'table1', size1, seed)
 
         # Create table2
-        self.create_table(self.conn2, self.cursor2, 'table2', 250, seed+100)
+        self.create_table(self.conn2, self.cursor2, 'table2', size2, seed+100)

@@ -19,7 +19,7 @@ class SemiJoin:
         self.timestamp_diff = timestamp_diff
         self.lazy = lazy
         self.eager = eager
-        self.counter = 0
+        self.counter = 0 # Initialize counter for counting the matching records
         self.logger = logging.getLogger("SemiJoin")
         self.logger.setLevel(logging.INFO)
 
@@ -33,7 +33,7 @@ class SemiJoin:
         count_table2 = len(self.table2)
 
         if count_table1 >= count_table2:
-            self.logger.info(f"{self.table1_name} is the largest")
+            self.logger.info(f"\n{self.table1_name} is the largest")
             return self.table1
         else:
             self.logger.info(f"{self.table2_name} is the largest")
@@ -80,7 +80,6 @@ class SemiJoin:
         - R1: The result of the semi-join operation.
         - size_used: The memory size (in MB) used by the result and lookup dictionaries.
         """
-        self.logger.info("\n============================== Semi Join ==============================")
 
         S = self.get_largest_table()
         R = self.table1 if S == self.table2 else self.table2
@@ -97,7 +96,7 @@ class SemiJoin:
         # Lazy
         if self.lazy:
             S_lookup = {row[0]: row[3] for row in S}
-
+            self.logger.info("\n============================== Semi Join Lazy ==============================")
             for row in R:
                 row_R_id = row[0]
                 if row_R_id in S_lookup:
@@ -108,13 +107,14 @@ class SemiJoin:
                     if time_diff < self.timestamp_diff:
                         # Add the row to the result set
                         R1.append(row)
-                        # self.logger.info(row)
+                        self.logger.info(row)
                         self.counter += 1
 
             size_used = (sys.getsizeof(R1) + sys.getsizeof(S_lookup)) / 1024 / 1024
 
         # Eager
         elif self.eager:
+            self.logger.info("\n============================== Semi Join Eager ==============================")
             S_lookup = {row[0]: (row[3]) for row in S}
             R_lookup = {row[0]: row for row in R}
             for key in R_lookup.keys():
@@ -125,20 +125,21 @@ class SemiJoin:
                     if time_diff < self.timestamp_diff:
                         # Add the row to the result set
                         R1.append(rowR)
-                        # self.logger.info(row)
+                        self.logger.info(rowR)
                         self.counter += 1
 
             size_used = (sys.getsizeof(R1) + sys.getsizeof(S_lookup) + sys.getsizeof(R_lookup)) / 1024 / 1024
 
         # Check only id -  timestamps are filtered before join
         else:
+            self.logger.info("\n============================== Semi Join FTTJ ==============================")
             S_lookup = {row[0]: row[3] for row in S}
             for row in R:
                 row_R_id = row[0]
                 if row_R_id in S_lookup:
                     # Add the row to the result set
                     R1.append(row)
-                    # self.logger.info(row)
+                    self.logger.info(row)
                     self.counter += 1
 
             size_used = (sys.getsizeof(R1) + sys.getsizeof(S_lookup)) / 1024 / 1024

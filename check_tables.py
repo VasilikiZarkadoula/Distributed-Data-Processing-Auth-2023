@@ -36,9 +36,9 @@ class CheckTables:
         """
         if len(table) > 0:
             logging.info(f"{table_name}")
-            # Print the retrieved data
-            #for row in table:
-                #logging.info(row)
+            # Log the retrieved data
+            for row in table:
+                logging.info(row)
         else:
             logging.info(f"{table_name} is empty.")
 
