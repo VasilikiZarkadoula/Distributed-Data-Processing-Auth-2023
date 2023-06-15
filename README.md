@@ -34,7 +34,6 @@ This will execute the Python scripts in the following order:
 3. `pipelined_hash_join.py`: Executes the pipelined hash join algorithm.
 4. `semi_join.py`: Performs the semi-join operation.
 
-Note: The databases `database1.db` and `database2.db` will be created within the Docker container.
 
 5. Once the container finishes running, you can access the results or any generated output as per the functionality of the Python scripts.
 
