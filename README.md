@@ -35,6 +35,7 @@ This will execute the Python scripts in the following order:
 4. `semi_join.py`: Performs the semi-join operation.
 
 
+
 5. Once the container finishes running, you can access the results or any generated output as per the functionality of the Python scripts.
 
 
