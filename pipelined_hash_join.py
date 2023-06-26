@@ -100,33 +100,6 @@ class HashJoin:
             if read_index_table1 >= len(self.table1) and read_index_table2 >= len(self.table2):
                 break
 
-        # Process the remaining tuples from table1 (if any)
-        while read_index_table1 < len(self.table1):
-            # Read a tuple from table1 at the current read index
-            tuple_ = self.table1[read_index_table1]
-
-            # Perform probing and insertion by using table2 as the probe hash table and table1 as the insert hash table
-            result = self.probe_and_insert(tuple_, self.ht2, self.ht1)
-
-            # Process the join result
-            self.process_join_result(result, self.table2_name, self.table1_name)
-
-            # Increment the read index for table1
-            read_index_table1 += 1
-
-        # Process the remaining tuples from table2 (if any)
-        while read_index_table2 < len(self.table2):
-            # Read a tuple from table2 at the current read index
-            tuple_ = self.table2[read_index_table2]
-
-            # Perform probing and insertion by using table1 as the probe hash table and table2 as the insert hash table
-            result = self.probe_and_insert(tuple_, self.ht1, self.ht2)
-
-            # Process the join result
-            self.process_join_result(result, self.table1_name, self.table2_name)
-
-            # Increment the read index for table2
-            read_index_table2 += 1
 
     def process_join_result(self, triple, probe, insert):
         """
